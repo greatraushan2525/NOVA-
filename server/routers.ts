@@ -1,10 +1,18 @@
 import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, router } from "./_core/trpc";
+import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
+import { z } from "zod";
+import { invokeLLM } from "./_core/llm";
+import { TRPCError } from "@trpc/server";
+import {
+  createConversation,
+  getConversationMessages,
+  addMessage,
+  deleteConversationMessages,
+} from "./db";
 
 export const appRouter = router({
-    // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
   system: systemRouter,
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
@@ -17,12 +25,129 @@ export const appRouter = router({
     }),
   }),
 
-  // TODO: add feature routers here, e.g.
-  // todo: router({
-  //   list: protectedProcedure.query(({ ctx }) =>
-  //     db.getUserTodos(ctx.user.id)
-  //   ),
-  // }),
+  chat: router({
+    sendMessage: protectedProcedure
+      .input(
+        z.object({
+          conversationId: z.number(),
+          message: z.string().min(1),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const { conversationId, message } = input;
+
+        // Verify conversation belongs to the user
+        const db = await import("./db").then((m) => m.getDb());
+        if (db) {
+          const { conversations } = await import("../drizzle/schema");
+          const { eq } = await import("drizzle-orm");
+          const conv = await db
+            .select()
+            .from(conversations)
+            .where(eq(conversations.id, conversationId))
+            .limit(1);
+
+          if (conv.length === 0 || conv[0].userId !== ctx.user.id) {
+            throw new TRPCError({
+              code: "UNAUTHORIZED",
+              message: "Conversation not found",
+            });
+          }
+        }
+
+        // Add user message to database
+        await addMessage(conversationId, "user", message);
+
+        // Get conversation history (last 10 messages for context)
+        const allMessages = await getConversationMessages(conversationId);
+        const contextMessages = allMessages.slice(-10);
+
+        // Prepare messages for LLM
+        const llmMessages: any[] = [
+          {
+            role: "system",
+            content:
+              "You are a helpful, friendly AI assistant. Answer questions clearly and concisely. If you don't know something, say so honestly.",
+          },
+          ...contextMessages.map((msg) => ({
+            role: msg.role,
+            content: msg.content,
+          })),
+        ];
+
+        // Call LLM
+        const response = await invokeLLM({
+          messages: llmMessages,
+        });
+
+        const messageContent = response.choices[0]?.message?.content;
+        const assistantReply =
+          typeof messageContent === "string" ? messageContent : "I couldn't generate a response.";
+
+        // Add assistant response to database
+        await addMessage(conversationId, "assistant", assistantReply);
+
+        return { reply: assistantReply };
+      }),
+
+    getHistory: protectedProcedure
+      .input(z.object({ conversationId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        // Verify conversation belongs to the user
+        const db = await import("./db").then((m) => m.getDb());
+        if (db) {
+          const { conversations } = await import("../drizzle/schema");
+          const { eq } = await import("drizzle-orm");
+          const conv = await db
+            .select()
+            .from(conversations)
+            .where(eq(conversations.id, input.conversationId))
+            .limit(1);
+
+          if (conv.length === 0 || conv[0].userId !== ctx.user.id) {
+            throw new TRPCError({
+              code: "UNAUTHORIZED",
+              message: "Conversation not found",
+            });
+          }
+        }
+
+        const messages = await getConversationMessages(input.conversationId);
+        return messages;
+      }),
+
+    createConversation: protectedProcedure.mutation(async ({ ctx }) => {
+      // Create conversation for the authenticated user
+      const result = await createConversation(ctx.user.id);
+      return result;
+    }),
+
+    resetConversation: protectedProcedure
+      .input(z.object({ conversationId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        // Verify conversation belongs to the user
+        const db = await import("./db").then((m) => m.getDb());
+        if (db) {
+          const { conversations } = await import("../drizzle/schema");
+          const { eq } = await import("drizzle-orm");
+          const conv = await db
+            .select()
+            .from(conversations)
+            .where(eq(conversations.id, input.conversationId))
+            .limit(1);
+
+          if (conv.length === 0 || conv[0].userId !== ctx.user.id) {
+            throw new TRPCError({
+              code: "UNAUTHORIZED",
+              message: "Conversation not found",
+            });
+          }
+        }
+
+        await deleteConversationMessages(input.conversationId);
+        return { success: true };
+      }),
+  }),
 });
 
 export type AppRouter = typeof appRouter;
