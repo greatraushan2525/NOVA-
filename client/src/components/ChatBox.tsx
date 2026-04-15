@@ -200,7 +200,7 @@ export function ChatBox({ conversationId }: { conversationId: number }) {
         </div>
 
         {/* Messages Container */}
-        <div className="flex-1 overflow-y-auto px-6 py-6 space-y-4">
+        <div className="flex-1 overflow-y-auto px-6 py-6 space-y-4" style={{backgroundColor: '#ffffff'}}>
           {messages.length === 0 && !isLoading && (
             <div className="flex items-center justify-center h-full">
               <div className="text-center">

@@ -10,6 +10,8 @@ import {
   getConversationMessages,
   addMessage,
   deleteConversationMessages,
+  getUserConversations,
+  deleteConversation,
 } from "./db";
 
 export const appRouter = router({
@@ -117,15 +119,13 @@ export const appRouter = router({
       }),
 
     createConversation: protectedProcedure.mutation(async ({ ctx }) => {
-      // Create conversation for the authenticated user
       const result = await createConversation(ctx.user.id);
-      return result;
+      return { conversationId: (result as any).insertId };
     }),
 
     resetConversation: protectedProcedure
       .input(z.object({ conversationId: z.number() }))
       .mutation(async ({ ctx, input }) => {
-        // Verify conversation belongs to the user
         const db = await import("./db").then((m) => m.getDb());
         if (db) {
           const { conversations } = await import("../drizzle/schema");
@@ -145,6 +145,18 @@ export const appRouter = router({
         }
 
         await deleteConversationMessages(input.conversationId);
+        return { success: true };
+      }),
+
+    getConversations: protectedProcedure.query(async ({ ctx }) => {
+      const conversations = await getUserConversations(ctx.user.id);
+      return conversations;
+    }),
+
+    deleteConversation: protectedProcedure
+      .input(z.object({ conversationId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        await deleteConversation(input.conversationId, ctx.user.id);
         return { success: true };
       }),
   }),

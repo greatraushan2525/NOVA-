@@ -1,50 +1,97 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { trpc } from "@/lib/trpc";
-import { ChatBox } from "@/components/ChatBox";
-import { Loader2 } from "lucide-react";
 import { getLoginUrl } from "@/const";
+import { trpc } from "@/lib/trpc";
+import { Loader2 } from "lucide-react";
+import { ModernLayout } from "@/components/ModernLayout";
+import { ChatBoxModern } from "@/components/ChatBoxModern";
+import { Button } from "@/components/ui/button";
+
+interface Conversation {
+  id: number;
+  title: string;
+  updatedAt: Date;
+}
 
 export default function Home() {
   const { user, loading: authLoading, isAuthenticated } = useAuth();
   const [conversationId, setConversationId] = useState<number | null>(null);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
   const [isInitializing, setIsInitializing] = useState(false);
 
+  // Mutations and Queries
   const createConversationMutation = trpc.chat.createConversation.useMutation();
+  const { data: conversationsData } = trpc.chat.getConversations.useQuery();
+  const deleteConversationMutation = trpc.chat.deleteConversation.useMutation();
 
-  // Initialize conversation when user is authenticated
+  // Initialize or load conversations
   useEffect(() => {
-    if (isAuthenticated && user && !conversationId) {
+    if (!isAuthenticated || !user) return;
+
+    const initializeChat = async () => {
       setIsInitializing(true);
-      createConversationMutation
-        .mutateAsync()
-        .then((result: any) => {
-          // Extract the insertId from the result
-          const newConvId = result.insertId || result[0]?.insertId;
-          if (newConvId) {
-            setConversationId(newConvId);
+      try {
+        // Load existing conversations
+        if (conversationsData) {
+          const formattedConvs = conversationsData.map((c: any) => ({
+            ...c,
+            updatedAt: new Date(c.updatedAt),
+          }));
+          setConversations(formattedConvs);
+
+          // Set current conversation to the most recent one, or create a new one
+          if (formattedConvs.length > 0) {
+            setConversationId(formattedConvs[0].id);
+          } else {
+            await createNewChat();
           }
-        })
-        .catch((error) => {
-          console.error("Failed to create conversation:", error);
-        })
-        .finally(() => {
-          setIsInitializing(false);
-        });
+        }
+      } catch (error) {
+        console.error("Error initializing chat:", error);
+        await createNewChat();
+      } finally {
+        setIsInitializing(false);
+      }
+    };
+
+    initializeChat();
+  }, [isAuthenticated, user]);
+
+  const createNewChat = async () => {
+    try {
+      const result = await createConversationMutation.mutateAsync();
+      setConversationId(result.conversationId);
+      // Refresh conversations list
+      if (conversationsData) {
+        const formattedConvs = conversationsData.map((c: any) => ({
+          ...c,
+          updatedAt: new Date(c.updatedAt),
+        }));
+        setConversations(formattedConvs);
+      }
+    } catch (error) {
+      console.error("Error creating new chat:", error);
     }
-  }, [isAuthenticated, user, conversationId, createConversationMutation]);
+  };
+
+  const handleDeleteConversation = async (id: number) => {
+    try {
+      await deleteConversationMutation.mutateAsync({ conversationId: id });
+      setConversations((prev) => prev.filter((c) => c.id !== id));
+      if (conversationId === id) {
+        await createNewChat();
+      }
+    } catch (error) {
+      console.error("Error deleting conversation:", error);
+    }
+  };
 
   if (authLoading) {
     return (
-      <div
-        className="flex items-center justify-center h-screen relative overflow-hidden"
-        style={{
-          background: `linear-gradient(135deg, #FF00FF 0%, #1a0033 50%, #0d001a 100%)`,
-        }}
-      >
+      <div className="flex items-center justify-center h-screen bg-white">
         <div className="text-center">
-          <Loader2 className="w-12 h-12 animate-spin text-[#10a37f] mx-auto mb-4" />
-          <p className="text-white">Loading...</p>
+          <Loader2 className="w-12 h-12 animate-spin text-green-600 mx-auto mb-4" />
+          <p className="text-gray-600">Loading...</p>
         </div>
       </div>
     );
@@ -52,26 +99,19 @@ export default function Home() {
 
   if (!isAuthenticated) {
     return (
-      <div
-        className="flex items-center justify-center h-screen relative overflow-hidden"
-        style={{
-          background: `linear-gradient(135deg, #FF00FF 0%, #1a0033 50%, #0d001a 100%)`,
-        }}
-      >
+      <div className="flex items-center justify-center h-screen bg-white">
         <div className="text-center">
-          <div className="w-20 h-20 rounded-full bg-gradient-to-br from-[#10a37f] to-[#0d8f6e] flex items-center justify-center mx-auto mb-6">
+          <div className="w-20 h-20 rounded-full bg-gradient-to-br from-green-400 to-green-600 flex items-center justify-center mx-auto mb-6">
             <span className="text-white font-bold text-3xl">AI</span>
           </div>
-          <h1 className="text-4xl font-bold text-white mb-2">Chat Assistant</h1>
-          <p className="text-gray-300 mb-8 max-w-md">
-            Experience intelligent conversations powered by advanced LLM technology
-          </p>
-          <a
-            href={getLoginUrl()}
-            className="inline-block px-8 py-3 bg-[#10a37f] hover:bg-[#0d8f6e] text-white font-semibold rounded-lg transition-all hover:shadow-lg hover:shadow-[#10a37f]/50"
+          <h1 className="text-4xl font-bold text-gray-800 mb-2">Chat Assistant</h1>
+          <p className="text-gray-600 mb-8">Sign in to start chatting</p>
+          <Button
+            onClick={() => (window.location.href = getLoginUrl())}
+            className="bg-green-600 hover:bg-green-700 text-white px-8 py-2"
           >
             Sign In to Chat
-          </a>
+          </Button>
         </div>
       </div>
     );
@@ -79,19 +119,24 @@ export default function Home() {
 
   if (isInitializing || !conversationId) {
     return (
-      <div
-        className="flex items-center justify-center h-screen relative overflow-hidden"
-        style={{
-          background: `linear-gradient(135deg, #FF00FF 0%, #1a0033 50%, #0d001a 100%)`,
-        }}
-      >
+      <div className="flex items-center justify-center h-screen bg-white">
         <div className="text-center">
-          <Loader2 className="w-12 h-12 animate-spin text-[#10a37f] mx-auto mb-4" />
-          <p className="text-white">Initializing chat...</p>
+          <Loader2 className="w-12 h-12 animate-spin text-green-600 mx-auto mb-4" />
+          <p className="text-gray-600">Initializing chat...</p>
         </div>
       </div>
     );
   }
 
-  return <ChatBox conversationId={conversationId} />;
+  return (
+    <ModernLayout
+      conversations={conversations}
+      currentConversationId={conversationId}
+      onSelectConversation={setConversationId}
+      onNewChat={createNewChat}
+      onDeleteConversation={handleDeleteConversation}
+    >
+      <ChatBoxModern conversationId={conversationId} />
+    </ModernLayout>
+  );
 }

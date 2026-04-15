@@ -1,6 +1,6 @@
-import { eq } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, conversations, messages } from "../drizzle/schema";
+import { InsertUser, users, conversations, messages, projects, tools } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -134,6 +134,91 @@ export async function deleteConversationMessages(conversationId: number) {
   const result = await db
     .delete(messages)
     .where(eq(messages.conversationId, conversationId));
+
+  return result;
+}
+
+export async function getUserConversations(userId: number, limit: number = 50) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const result = await db
+    .select()
+    .from(conversations)
+    .where(eq(conversations.userId, userId))
+    .orderBy(desc(conversations.updatedAt))
+    .limit(limit);
+
+  return result;
+}
+
+export async function deleteConversation(conversationId: number, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const conv = await db
+    .select()
+    .from(conversations)
+    .where(eq(conversations.id, conversationId))
+    .limit(1);
+
+  if (!conv || conv[0].userId !== userId) {
+    throw new Error("Unauthorized");
+  }
+
+  await db.delete(messages).where(eq(messages.conversationId, conversationId));
+  const result = await db
+    .delete(conversations)
+    .where(eq(conversations.id, conversationId));
+
+  return result;
+}
+
+export async function updateConversationTitle(conversationId: number, userId: number, title: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const conv = await db
+    .select()
+    .from(conversations)
+    .where(eq(conversations.id, conversationId))
+    .limit(1);
+
+  if (!conv || conv[0].userId !== userId) {
+    throw new Error("Unauthorized");
+  }
+
+  const result = await db
+    .update(conversations)
+    .set({ title, updatedAt: new Date() })
+    .where(eq(conversations.id, conversationId));
+
+  return result;
+}
+
+export async function getUserProjects(userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const result = await db
+    .select()
+    .from(projects)
+    .where(eq(projects.userId, userId))
+    .orderBy(desc(projects.createdAt));
+
+  return result;
+}
+
+export async function createProject(userId: number, name: string, description?: string, color?: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const result = await db.insert(projects).values({
+    userId,
+    name,
+    description: description || null,
+    color: color || "#10a37f",
+  });
 
   return result;
 }

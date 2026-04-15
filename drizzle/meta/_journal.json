@@ -15,6 +15,13 @@
       "when": 1776144869141,
       "tag": "0001_gigantic_speed",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1776219295193,
+      "tag": "0002_odd_nuke",
+      "breakpoints": true
     }
   ]
 }
