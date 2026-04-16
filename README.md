@@ -1,2 +1,2 @@
-# NOVA-
+# NOVA
 AI chat Assistant
