@@ -17,6 +17,7 @@ export default function Home() {
   const { user, loading: authLoading, isAuthenticated } = useAuth();
   const [conversationId, setConversationId] = useState<number | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [filteredConversations, setFilteredConversations] = useState<Conversation[]>([]);
   const [isInitializing, setIsInitializing] = useState(false);
 
   // Mutations and Queries
@@ -78,12 +79,25 @@ export default function Home() {
     try {
       await deleteConversationMutation.mutateAsync({ conversationId: id });
       setConversations((prev) => prev.filter((c) => c.id !== id));
+      setFilteredConversations((prev) => prev.filter((c) => c.id !== id));
       if (conversationId === id) {
         await createNewChat();
       }
     } catch (error) {
       console.error("Error deleting conversation:", error);
     }
+  };
+
+  const handleSearch = (query: string) => {
+    if (!query.trim()) {
+      setFilteredConversations(conversations);
+      return;
+    }
+    const query_lower = query.toLowerCase();
+    const results = conversations.filter((conv) =>
+      conv.title.toLowerCase().includes(query_lower)
+    );
+    setFilteredConversations(results);
   };
 
   if (authLoading) {
@@ -102,10 +116,10 @@ export default function Home() {
       <div className="flex items-center justify-center h-screen bg-white">
         <div className="text-center">
           <div className="w-20 h-20 rounded-full bg-gradient-to-br from-green-400 to-green-600 flex items-center justify-center mx-auto mb-6">
-            <span className="text-white font-bold text-3xl">AI</span>
+            <span className="text-white font-bold text-3xl">✨</span>
           </div>
-          <h1 className="text-4xl font-bold text-gray-800 mb-2">Chat Assistant</h1>
-          <p className="text-gray-600 mb-8">Sign in to start chatting</p>
+          <h1 className="text-4xl font-bold text-gray-800 mb-2">Nova</h1>
+          <p className="text-gray-600 mb-8">AI-powered conversations at your fingertips</p>
           <Button
             onClick={() => (window.location.href = getLoginUrl())}
             className="bg-green-600 hover:bg-green-700 text-white px-8 py-2"
@@ -130,11 +144,12 @@ export default function Home() {
 
   return (
     <ModernLayout
-      conversations={conversations}
+      conversations={filteredConversations.length > 0 ? filteredConversations : conversations}
       currentConversationId={conversationId}
       onSelectConversation={setConversationId}
       onNewChat={createNewChat}
       onDeleteConversation={handleDeleteConversation}
+      onSearch={handleSearch}
     >
       <ChatBoxModern conversationId={conversationId} />
     </ModernLayout>

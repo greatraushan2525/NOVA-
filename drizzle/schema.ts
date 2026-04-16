@@ -29,6 +29,8 @@ export const conversations = mysqlTable("conversations", {
   id: int("id").autoincrement().primaryKey(),
   userId: int("userId").notNull(),
   title: varchar("title", { length: 255 }).default("New Chat"),
+  shareToken: varchar("shareToken", { length: 64 }).unique(),
+  isPublic: mysqlEnum("isPublic", ["true", "false"]).default("false"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

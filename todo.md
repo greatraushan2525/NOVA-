@@ -63,3 +63,35 @@
 ## Bug Fixes
 - [x] Fix authentication session persistence issue (Safari)
 - [x] Ensure smooth performance across all features
+
+
+## Nova Enhancements (Phase 2)
+
+### Branding & Naming
+- [x] Rename chatbot from "Chat Assistant" to "Nova"
+- [x] Update page title to "Nova - AI Chat"
+- [x] Update favicon and branding elements
+- [x] Update all UI text references
+
+### Conversation Search & Filtering
+- [x] Add search input field in sidebar
+- [x] Implement search filtering logic in backend
+- [x] Filter conversations by title and content
+- [x] Add real-time search results
+- [x] Add clear/reset search button
+
+### Automatic Title Generation
+- [x] Generate conversation titles from first user message
+- [x] Use LLM to create meaningful titles (max 50 chars)
+- [x] Update title when conversation is created
+- [x] Allow manual title editing
+- [x] Display generated titles in sidebar
+
+### Message Export & Sharing
+- [x] Add export button to chat interface
+- [x] Implement PDF export functionality
+- [x] Implement Markdown export functionality
+- [x] Generate shareable links for conversations
+- [x] Add share dialog with copy-to-clipboard
+- [x] Create unique share tokens in database
+- [x] Add public view page for shared conversations

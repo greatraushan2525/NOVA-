@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { Streamdown } from "streamdown";
 import { Button } from "@/components/ui/button";
-import { Loader2, Send } from "lucide-react";
+import { Loader2, Send, Download, Share2 } from "lucide-react";
+import { toast } from "sonner";
 
 interface Message {
   id: number;
@@ -15,6 +16,7 @@ export function ChatBoxModern({ conversationId }: { conversationId: number }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -25,6 +27,8 @@ export function ChatBoxModern({ conversationId }: { conversationId: number }) {
 
   // Send message mutation
   const sendMessageMutation = trpc.chat.sendMessage.useMutation();
+  const generateTitleMutation = trpc.chat.generateTitle.useMutation();
+  const generateShareLinkMutation = trpc.chat.generateShareLink.useMutation();
 
   // Update messages when history is fetched
   useEffect(() => {
@@ -107,6 +111,38 @@ export function ChatBoxModern({ conversationId }: { conversationId: number }) {
     }
   };
 
+  const handleExportMarkdown = async () => {
+    try {
+      const result = await trpc.chat.exportConversation.useQuery(
+        { conversationId, format: "markdown" },
+        { enabled: false }
+      ).refetch();
+      if (result.data) {
+        const element = document.createElement("a");
+        const file = new Blob([result.data.content], { type: "text/markdown" });
+        element.href = URL.createObjectURL(file);
+        element.download = result.data.filename;
+        document.body.appendChild(element);
+        element.click();
+        document.body.removeChild(element);
+        toast.success("Exported as Markdown");
+      }
+    } catch (error) {
+      toast.error("Failed to export");
+    }
+  };
+
+  const handleGenerateShareLink = async () => {
+    try {
+      const result = await generateShareLinkMutation.mutateAsync({ conversationId });
+      const fullUrl = `${window.location.origin}${result.shareUrl}`;
+      navigator.clipboard.writeText(fullUrl);
+      toast.success("Share link copied to clipboard");
+    } catch (error) {
+      toast.error("Failed to generate share link");
+    }
+  };
+
   return (
     <div className="flex flex-col h-full bg-white">
       {/* Messages Container */}
@@ -182,6 +218,31 @@ export function ChatBoxModern({ conversationId }: { conversationId: number }) {
 
         <div ref={messagesEndRef} />
       </div>
+
+      {/* Export/Share Buttons */}
+      {messages.length > 0 && (
+        <div className="border-t border-gray-200 bg-gray-50 px-6 py-3 flex gap-2 justify-end">
+          <Button
+            onClick={handleExportMarkdown}
+            variant="outline"
+            size="sm"
+            className="text-xs"
+          >
+            <Download className="w-3 h-3 mr-1" />
+            Export MD
+          </Button>
+          <Button
+            onClick={handleGenerateShareLink}
+            disabled={generateShareLinkMutation.isPending}
+            variant="outline"
+            size="sm"
+            className="text-xs"
+          >
+            <Share2 className="w-3 h-3 mr-1" />
+            Share
+          </Button>
+        </div>
+      )}
 
       {/* Input Area */}
       <div className="border-t border-gray-200 bg-white px-6 py-4">

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Menu, X, Plus, Trash2, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ToolsPanel } from "./ToolsPanel";
+import { SearchBar } from "./SearchBar";
 
 interface Conversation {
   id: number;
@@ -15,6 +16,7 @@ interface ModernLayoutProps {
   onSelectConversation: (id: number) => void;
   onNewChat: () => void;
   onDeleteConversation: (id: number) => void;
+  onSearch?: (query: string) => void;
   children: React.ReactNode;
 }
 
@@ -24,6 +26,7 @@ export function ModernLayout({
   onSelectConversation,
   onNewChat,
   onDeleteConversation,
+  onSearch,
   children,
 }: ModernLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -37,7 +40,7 @@ export function ModernLayout({
         } transition-all duration-300 bg-white border-r border-gray-200 flex flex-col overflow-hidden`}
       >
         {/* New Chat Button */}
-        <div className="p-4 border-b border-gray-200">
+        <div className="p-4 border-b border-gray-200 space-y-3">
           <Button
             onClick={onNewChat}
             className="w-full bg-green-600 hover:bg-green-700 text-white flex items-center justify-center gap-2"
@@ -45,6 +48,9 @@ export function ModernLayout({
             <Plus className="w-4 h-4" />
             New Chat
           </Button>
+          {onSearch && (
+            <SearchBar onSearch={onSearch} />
+          )}
         </div>
 
         {/* Conversations List */}
@@ -117,7 +123,7 @@ export function ModernLayout({
               <Menu className="w-5 h-5 text-gray-600" />
             )}
           </button>
-          <h1 className="text-lg font-semibold text-gray-800">Chat Assistant</h1>
+          <h1 className="text-lg font-semibold text-gray-800">✨ Nova</h1>
           <div className="w-9" />
         </div>
 

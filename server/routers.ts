@@ -159,6 +159,122 @@ export const appRouter = router({
         await deleteConversation(input.conversationId, ctx.user.id);
         return { success: true };
       }),
+
+    searchConversations: protectedProcedure
+      .input(z.object({ query: z.string().min(1) }))
+      .query(async ({ ctx, input }) => {
+        const conversations = await getUserConversations(ctx.user.id);
+        const query = input.query.toLowerCase();
+        return conversations.filter(
+          (conv: any) =>
+            conv.title.toLowerCase().includes(query)
+        );
+      }),
+
+    generateTitle: protectedProcedure
+      .input(z.object({ conversationId: z.number(), firstMessage: z.string() }))
+      .mutation(async ({ ctx, input }) => {
+        try {
+          const response = await invokeLLM({
+            messages: [
+              {
+                role: "system",
+                content: "Generate a short, descriptive title (max 50 characters) for a chat conversation based on the first user message. Return only the title, no quotes or explanation.",
+              },
+              { role: "user", content: input.firstMessage },
+            ],
+          });
+
+          const title = (response.choices[0]?.message?.content as string)?.trim().substring(0, 50) || "New Chat";
+
+          const db = await import("./db").then((m) => m.getDb());
+          if (db) {
+            const { conversations } = await import("../drizzle/schema");
+            const { eq } = await import("drizzle-orm");
+            await db
+              .update(conversations)
+              .set({ title })
+              .where(eq(conversations.id, input.conversationId));
+          }
+
+          return { title };
+        } catch (error) {
+          console.error("Error generating title:", error);
+          return { title: "New Chat" };
+        }
+      }),
+
+    generateShareLink: protectedProcedure
+      .input(z.object({ conversationId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const db = await import("./db").then((m) => m.getDb());
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+
+        const { conversations } = await import("../drizzle/schema");
+        const { eq } = await import("drizzle-orm");
+
+        const conv = await db
+          .select()
+          .from(conversations)
+          .where(eq(conversations.id, input.conversationId))
+          .limit(1);
+
+        if (conv.length === 0 || conv[0].userId !== ctx.user.id) {
+          throw new TRPCError({ code: "UNAUTHORIZED" });
+        }
+
+        const shareToken = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+
+        await db
+          .update(conversations)
+          .set({ shareToken, isPublic: "true" })
+          .where(eq(conversations.id, input.conversationId));
+
+        return { shareToken, shareUrl: `/share/${shareToken}` };
+      }),
+
+    exportConversation: protectedProcedure
+      .input(z.object({ conversationId: z.number(), format: z.enum(["markdown", "json"]) }))
+      .query(async ({ ctx, input }) => {
+        const db = await import("./db").then((m) => m.getDb());
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+
+        const { conversations } = await import("../drizzle/schema");
+        const { eq } = await import("drizzle-orm");
+
+        const conv = await db
+          .select()
+          .from(conversations)
+          .where(eq(conversations.id, input.conversationId))
+          .limit(1);
+
+        if (conv.length === 0 || conv[0].userId !== ctx.user.id) {
+          throw new TRPCError({ code: "UNAUTHORIZED" });
+        }
+
+        const messages = await getConversationMessages(input.conversationId);
+
+        if (input.format === "markdown") {
+          let markdown = `# ${conv[0].title}\n\n`;
+          markdown += `*Exported on ${new Date().toLocaleString()}*\n\n`;
+          messages.forEach((msg) => {
+            const prefix = msg.role === "user" ? "**You:**" : "**Nova:**";
+            markdown += `${prefix}\n${msg.content}\n\n`;
+          });
+          return { content: markdown, filename: `${conv[0].title}.md` };
+        } else {
+          const json = {
+            title: conv[0].title,
+            exportedAt: new Date().toISOString(),
+            messages: messages.map((msg) => ({
+              role: msg.role,
+              content: msg.content,
+              timestamp: msg.createdAt,
+            })),
+          };
+          return { content: JSON.stringify(json, null, 2), filename: `${conv[0].title}.json` };
+        }
+      }),
   }),
 });
 
